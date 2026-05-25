@@ -444,11 +444,26 @@ function initSupabase() {
   });
 }
 
+async function fetchFromCloud(timeoutMs) {
+  const queryPromise = sb.from('user_data').select('state').eq('user_id', currentUser.id).single();
+  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs));
+  return Promise.race([queryPromise, timeoutPromise]);
+}
+
 async function loadFromCloud() {
   try {
-    const queryPromise = sb.from('user_data').select('state').eq('user_id', currentUser.id).single();
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000));
-    const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+    let result;
+    try {
+      result = await fetchFromCloud(10000);
+    } catch (e) {
+      if (e.message === 'timeout') {
+        console.warn('Cloud load slow, retrying...');
+        result = await fetchFromCloud(15000);
+      } else {
+        throw e;
+      }
+    }
+    const { data, error } = result;
     if (error && error.code !== 'PGRST116') { load(); return; }
     if (data?.state && Array.isArray(data.state.decks) && data.state.decks.length > 0) {
       state = data.state;
