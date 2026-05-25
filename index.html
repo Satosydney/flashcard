@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>フラッシュカード</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; color: #1a202c; min-height: 100vh; }
+
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  header { background: #2d3748; color: white; padding: 10px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  header h1 { font-size: 1.1rem; font-weight: 700; }
+  .deck-switcher { display: flex; gap: 6px; margin-left: 8px; }
+  .deck-tab { padding: 5px 16px; border: 1.5px solid rgba(255,255,255,0.3); border-radius: 20px; cursor: pointer; font-size: 0.82rem; font-weight: 600; color: rgba(255,255,255,0.65); background: transparent; transition: all 0.2s; }
+  .deck-tab:hover { border-color: rgba(255,255,255,0.7); color: white; }
+  .deck-tab.active { background: white; color: #2d3748; border-color: white; }
+
+  .tab-bar { display: flex; background: #fff; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+  .tab { padding: 12px 24px; cursor: pointer; font-size: 0.9rem; font-weight: 500; color: #718096; border-bottom: 3px solid transparent; transition: all 0.2s; }
+  .tab.active { color: #4a90d9; border-bottom-color: #4a90d9; }
+  .tab:hover:not(.active) { color: #2d3748; background: #f7fafc; }
+  .content { flex: 1; overflow-y: auto; padding: 20px; }
+
+  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 0.875rem; font-weight: 600; transition: all 0.2s; }
+  .btn-primary { background: #4a90d9; color: white; }
+  .btn-primary:hover { background: #357abd; }
+  .btn-success { background: #48bb78; color: white; }
+  .btn-success:hover { background: #38a169; }
+  .btn-danger { background: #fc8181; color: white; }
+  .btn-danger:hover { background: #e53e3e; }
+  .btn-ghost { background: transparent; color: #718096; border: 1px solid #e2e8f0; }
+  .btn-ghost:hover { background: #f7fafc; }
+  .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+  .card-count { color: #718096; font-size: 0.875rem; margin-left: auto; }
+
+  .cards-table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .cards-table th { background: #f7fafc; padding: 12px 16px; text-align: left; font-size: 0.8rem; font-weight: 600; color: #718096; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; }
+  .cards-table td { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-size: 0.875rem; vertical-align: top; }
+  .cards-table tr:last-child td { border-bottom: none; }
+  .cards-table tr:hover td { background: #f7fafc; }
+  .col-word { width: 22%; font-weight: 600; }
+  .col-meaning { width: 25%; }
+  .col-example { width: 38%; color: #4a5568; font-size: 0.82rem; }
+  .col-actions { width: 15%; white-space: nowrap; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: white; border-radius: 16px; padding: 28px; width: 520px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .modal h2 { font-size: 1.1rem; margin-bottom: 20px; color: #2d3748; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: #4a5568; margin-bottom: 6px; }
+  .form-group input, .form-group textarea { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.9rem; outline: none; transition: border-color 0.2s; font-family: inherit; }
+  .form-group input:focus, .form-group textarea:focus { border-color: #4a90d9; }
+  .form-group textarea { min-height: 80px; resize: vertical; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+
+  .import-area { border: 2px dashed #cbd5e0; border-radius: 12px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; background: white; }
+  .import-area:hover, .import-area.drag { border-color: #4a90d9; background: #ebf4ff; }
+  .import-area p { color: #718096; margin-bottom: 8px; }
+  .import-area .hint { font-size: 0.8rem; color: #a0aec0; }
+  .import-section { max-width: 600px; }
+  .format-box { background: #f7fafc; border-radius: 8px; padding: 16px; margin-top: 20px; font-size: 0.82rem; }
+  .format-box pre { background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-top: 8px; overflow-x: auto; line-height: 1.6; font-size: 0.8rem; }
+
+  .study-setup { max-width: 480px; margin: 40px auto 0; background: white; border-radius: 16px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .study-setup h2 { font-size: 1.1rem; margin-bottom: 20px; text-align: center; }
+  .option-group { margin-bottom: 20px; }
+  .option-group > label { display: block; font-size: 0.8rem; font-weight: 600; color: #4a5568; margin-bottom: 10px; }
+  .radio-group { display: flex; gap: 12px; flex-wrap: wrap; }
+  .radio-label { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 0.875rem; transition: all 0.2s; }
+  .radio-label input { accent-color: #4a90d9; }
+  .radio-label:has(input:checked) { border-color: #4a90d9; background: #ebf4ff; color: #2c5282; }
+  .phrase-notice { background: #f0fff4; border: 1.5px solid #9ae6b4; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; }
+  .phrase-notice .flag { font-size: 1.6rem; }
+  .phrase-notice .desc { font-size: 0.88rem; color: #276749; font-weight: 600; }
+  .phrase-notice .sub { font-size: 0.78rem; color: #38a169; margin-top: 2px; }
+
+  .study-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+  .progress-bar { flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #4a90d9; border-radius: 4px; transition: width 0.3s; }
+  .progress-text { font-size: 0.8rem; color: #718096; white-space: nowrap; }
+
+  .card-scene { perspective: 1000px; max-width: 640px; margin: 0 auto 24px; height: 320px; cursor: pointer; }
+  .card-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+  .card-scene.flipped .card-inner { transform: rotateY(180deg); }
+  .card-face { position: absolute; inset: 0; background: white; border-radius: 20px; box-shadow: 0 4px 24px rgba(0,0,0,0.12); -webkit-backface-visibility: hidden; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 36px; text-align: center; }
+  .card-face.back { transform: rotateY(180deg); background: #f0f7ff; }
+  .card-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #a0aec0; margin-bottom: 16px; }
+  .card-word { font-size: 2rem; font-weight: 700; color: #1a202c; margin-bottom: 10px; line-height: 1.3; }
+  .card-example { font-size: 0.88rem; color: #718096; font-style: italic; line-height: 1.5; max-width: 480px; }
+  .card-hint { font-size: 0.8rem; color: #a0aec0; margin-top: 20px; }
+
+  .speak-btn { background: none; border: 1px solid #cbd5e0; border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 0.8rem; color: #4a5568; display: flex; align-items: center; gap: 6px; margin-top: 14px; transition: all 0.2s; }
+  .speak-btn:hover { background: #f7fafc; border-color: #4a90d9; color: #4a90d9; }
+
+  .card-actions { display: flex; gap: 16px; justify-content: center; max-width: 640px; margin: 0 auto; }
+  .btn-correct { background: #48bb78; color: white; font-size: 1rem; padding: 14px 40px; border-radius: 12px; }
+  .btn-correct:hover { background: #38a169; }
+  .btn-incorrect { background: #fc8181; color: white; font-size: 1rem; padding: 14px 40px; border-radius: 12px; }
+  .btn-incorrect:hover { background: #e53e3e; }
+
+  .result-screen { max-width: 480px; margin: 40px auto; background: white; border-radius: 20px; padding: 40px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.1); }
+  .result-score { font-size: 3.5rem; font-weight: 800; color: #4a90d9; margin: 16px 0; }
+  .result-label { font-size: 0.9rem; color: #718096; margin-bottom: 24px; }
+  .result-breakdown { display: flex; gap: 20px; justify-content: center; margin-bottom: 32px; }
+  .result-item { text-align: center; }
+  .result-item span { display: block; font-size: 1.4rem; font-weight: 700; }
+  .result-item small { font-size: 0.75rem; color: #a0aec0; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: #a0aec0; }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 16px; }
+  .hidden { display: none !important; }
+
+  /* Import mode toggle */
+  .import-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+  .paste-area { width: 100%; min-height: 180px; border: 2px solid #e2e8f0; border-radius: 12px; padding: 14px; font-size: 0.875rem; font-family: inherit; outline: none; resize: vertical; background: white; transition: border-color 0.2s; line-height: 1.5; }
+  .paste-area:focus { border-color: #4a90d9; }
+  .paste-area::placeholder { color: #a0aec0; }
+  .paste-preview { background: white; border-radius: 12px; padding: 16px; margin-top: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .paste-count { font-weight: 700; color: #2d3748; margin-bottom: 12px; font-size: 0.95rem; }
+  .preview-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 14px; }
+  .preview-table th { background: #f7fafc; padding: 8px 12px; text-align: left; color: #718096; border-bottom: 1px solid #e2e8f0; font-size: 0.78rem; }
+  .preview-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preview-table tr:last-child td { border-bottom: none; }
+  .preview-more td { color: #a0aec0 !important; text-align: center; font-style: italic; }
+
+  /* Phrase deck: card-word smaller for long sentences */
+  .phrase-mode .card-word { font-size: 1.3rem; font-weight: 600; }
+  .phrase-mode .card-face.back .card-word { color: #2c5282; }
+  .phrase-pattern { font-size: 0.78rem; color: #9f7aea; background: #faf5ff; border: 1px solid #e9d8fd; border-radius: 6px; padding: 6px 12px; margin-top: 12px; font-family: monospace; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>📚 フラッシュカード</h1>
+    <div class="deck-switcher" id="deck-switcher"></div>
+  </header>
+
+  <div class="tab-bar">
+    <div class="tab active" data-tab="cards">カード一覧</div>
+    <div class="tab" data-tab="study">学習する</div>
+    <div class="tab" data-tab="import">CSVインポート</div>
+  </div>
+
+  <!-- Cards List Tab -->
+  <div id="tab-cards" class="content">
+    <div class="toolbar">
+      <button class="btn btn-primary" onclick="openAddModal()">＋ カードを追加</button>
+      <button class="btn btn-ghost" onclick="clearAll()">全削除</button>
+      <span class="card-count" id="card-count">0 枚</span>
+    </div>
+    <div id="cards-container"></div>
+  </div>
+
+  <!-- Study Tab -->
+  <div id="tab-study" class="content hidden">
+    <div id="study-setup">
+      <div class="study-setup">
+        <h2 id="study-title">学習設定</h2>
+
+        <!-- Vocab deck: direction selector -->
+        <div class="option-group" id="direction-options">
+          <label>出題方向</label>
+          <div class="radio-group">
+            <label class="radio-label"><input type="radio" name="direction" value="front" checked> 表→裏（単語→意味）</label>
+            <label class="radio-label"><input type="radio" name="direction" value="back"> 裏→表（意味→単語）</label>
+            <label class="radio-label"><input type="radio" name="direction" value="random"> ランダム</label>
+          </div>
+        </div>
+
+        <!-- Phrase deck: fixed direction notice -->
+        <div class="phrase-notice hidden" id="phrase-notice">
+          <div class="flag">🇯🇵→🇬🇧</div>
+          <div>
+            <div class="desc">日本語訳を見て英文を言う</div>
+            <div class="sub">フレーズデッキは日→英固定</div>
+          </div>
+        </div>
+
+        <div class="option-group">
+          <label>出題順</label>
+          <div class="radio-group">
+            <label class="radio-label"><input type="radio" name="order" value="sequential" checked> 順番通り</label>
+            <label class="radio-label"><input type="radio" name="order" value="shuffle"> シャッフル</label>
+          </div>
+        </div>
+
+        <div class="option-group">
+          <label>学習モード</label>
+          <div class="radio-group">
+            <label class="radio-label"><input type="radio" name="studymode" value="normal" checked> 通常（1周して終了）</label>
+            <label class="radio-label"><input type="radio" name="studymode" value="mastery"> 習得モード（全問正解まで繰り返す）</label>
+          </div>
+        </div>
+        <button class="btn btn-success" style="width:100%; padding:14px; font-size:1rem;" onclick="startStudy()">学習開始</button>
+      </div>
+    </div>
+
+    <div id="study-session" class="hidden">
+      <div class="study-header">
+        <button class="btn btn-ghost btn-sm" onclick="endStudy()">← 終了</button>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <span class="progress-text" id="progress-text">0 / 0</span>
+      </div>
+
+      <div class="card-scene" id="card-scene" onclick="flipCard()">
+        <div class="card-inner" id="card-inner">
+          <div class="card-face front">
+            <div class="card-label" id="front-label">単語</div>
+            <div class="card-word" id="front-word"></div>
+            <div class="card-example" id="front-example"></div>
+            <button class="speak-btn" id="front-speak" onclick="event.stopPropagation(); speakFront()">🔊 読み上げ</button>
+            <div class="card-hint">クリックで裏返す</div>
+          </div>
+          <div class="card-face back">
+            <div class="card-label" id="back-label">意味</div>
+            <div class="card-word" id="back-word"></div>
+            <div id="back-pattern" class="phrase-pattern hidden"></div>
+            <div class="card-example" id="back-example"></div>
+            <button class="speak-btn" id="back-speak" onclick="event.stopPropagation(); speakBack()">🔊 読み上げ</button>
+            <div class="card-hint">クリックで表に戻す</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-actions" id="answer-actions" style="display:none;">
+        <button class="btn btn-incorrect" onclick="answer(false)">✗ 不正解</button>
+        <button class="btn btn-correct" onclick="answer(true)">✓ 正解</button>
+      </div>
+    </div>
+
+    <div id="study-result" class="hidden">
+      <div class="result-screen">
+        <div style="font-size:1.1rem; font-weight:700; color:#2d3748;" id="result-title">結果</div>
+        <div class="result-score" id="result-score"></div>
+        <div class="result-label" id="result-label">正答率</div>
+        <div class="result-breakdown">
+          <div class="result-item"><span style="color:#48bb78;" id="result-correct">0</span><small id="label-correct">正解</small></div>
+          <div class="result-item"><span style="color:#fc8181;" id="result-incorrect">0</span><small id="label-incorrect">不正解</small></div>
+          <div class="result-item"><span style="color:#4a90d9;" id="result-total">0</span><small id="label-total">合計</small></div>
+        </div>
+        <button class="btn btn-primary" style="width:100%; padding:14px;" onclick="endStudy()">もう一度設定する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Tab -->
+  <div id="tab-import" class="content hidden">
+    <div class="import-section">
+      <div class="import-toggle">
+        <button class="btn btn-primary" id="btn-mode-file"  onclick="setImportMode('file')">📂 ファイル</button>
+        <button class="btn btn-ghost"   id="btn-mode-paste" onclick="setImportMode('paste')">📋 貼り付け</button>
+      </div>
+
+      <!-- File mode -->
+      <div id="import-file-area">
+        <div class="import-area" id="import-area"
+             onclick="document.getElementById('csv-file').click()"
+             ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+          <div style="font-size:2.5rem; margin-bottom:12px;">📂</div>
+          <p style="font-weight:600;" id="import-label">CSVファイルをドロップ、またはクリックして選択</p>
+          <p class="hint">BOM付きUTF-8・UTF-8・Shift-JIS 自動判定</p>
+          <input type="file" id="csv-file" accept=".csv,.txt" style="display:none" onchange="handleFileSelect(event)">
+        </div>
+      </div>
+
+      <!-- Paste mode -->
+      <div id="import-paste-area" class="hidden">
+        <textarea class="paste-area" id="paste-input"
+                  placeholder="ExcelやGoogleスプレッドシートでセルを選択してコピー（Ctrl+C）し、ここに貼り付け（Ctrl+V）してください。&#10;&#10;タブ区切り（スプレッドシートコピー）・カンマ区切り（CSV）どちらも自動判定します。"
+                  onpaste="setTimeout(onPasteInput, 0)" oninput="onPasteInput()"></textarea>
+        <div id="paste-preview" class="paste-preview hidden">
+          <div class="paste-count" id="paste-count-text"></div>
+          <table class="preview-table" id="preview-table"></table>
+          <button class="btn btn-success" onclick="importFromPaste()">このデータをインポート</button>
+          <button class="btn btn-ghost" onclick="clearPaste()" style="margin-left:8px">クリア</button>
+        </div>
+      </div>
+
+      <div class="format-box" id="format-box"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2 id="modal-title">カードを追加</h2>
+    <div class="form-group">
+      <label id="label-word">単語</label>
+      <input type="text" id="input-word">
+    </div>
+    <div class="form-group">
+      <label id="label-meaning">意味</label>
+      <input type="text" id="input-meaning">
+    </div>
+    <div class="form-group">
+      <label id="label-example">例文（任意）</label>
+      <textarea id="input-example"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveCard()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+const STORAGE_KEY = 'flashcard_v2';
+let state = { decks: [], activeDeckId: 'vocab' };
+let editingId = null;
+
+// Study
+let studyQueue = [], studyIndex = 0, studyCorrect = 0;
+let studyDirection = 'front', isFlipped = false, currentFrontIsEnglish = true;
+let masteryMode = false, masteryTotal = 0, masteryAttempts = 0;
+
+// ── Deck helpers ───────────────────────────────────────────────
+function currentDeck() {
+  return state.decks.find(d => d.id === state.activeDeckId) || state.decks[0];
+}
+function currentCards() { return currentDeck().cards; }
+
+function getLabels(type) {
+  if (type === 'phrase') return { word: '英文', meaning: '日本語訳', example: '表現パターン（ヒント）' };
+  return { word: '単語', meaning: '意味', example: '例文' };
+}
+
+// ── Persistence ────────────────────────────────────────────────
+function initDefaultDecks() {
+  state = {
+    decks: [
+      { id: 'vocab',  name: '単語',     type: 'vocab',  cards: [] },
+      { id: 'phrase', name: 'フレーズ', type: 'phrase', cards: [] }
+    ],
+    activeDeckId: 'vocab'
+  };
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      initDefaultDecks();
+      // Migrate v1 data (flat card array) into vocab deck
+      const old = localStorage.getItem('flashcard_v1');
+      if (old) {
+        const arr = JSON.parse(old);
+        if (Array.isArray(arr) && arr.length > 0) state.decks[0].cards = arr;
+      }
+      return;
+    }
+    const data = JSON.parse(raw);
+    if (data && Array.isArray(data.decks)) {
+      state = data;
+    } else {
+      initDefaultDecks();
+    }
+  } catch { initDefaultDecks(); }
+}
+
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+// ── Deck switching ─────────────────────────────────────────────
+function switchDeck(id) {
+  state.activeDeckId = id;
+  save();
+  renderAll();
+  endStudy();
+}
+
+// ── Render everything ──────────────────────────────────────────
+function renderAll() {
+  renderDeckSwitcher();
+  renderCards();
+  updateStudyUI();
+  updateModalLabels();
+  updateImportUI();
+}
+
+function renderDeckSwitcher() {
+  document.getElementById('deck-switcher').innerHTML = state.decks.map(d =>
+    `<button class="deck-tab${d.id === state.activeDeckId ? ' active' : ''}" onclick="switchDeck('${d.id}')">${esc(d.name)}</button>`
+  ).join('');
+}
+
+function renderCards() {
+  const deck = currentDeck();
+  const cards = deck.cards;
+  const L = getLabels(deck.type);
+  document.getElementById('card-count').textContent = cards.length + ' 枚';
+  const container = document.getElementById('cards-container');
+  if (cards.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">📝</div><div>カードがありません。<br>「カードを追加」またはCSVインポートで追加してください。</div></div>`;
+    return;
+  }
+  container.innerHTML = `
+    <table class="cards-table">
+      <thead><tr>
+        <th class="col-word">${L.word}</th>
+        <th class="col-meaning">${L.meaning}</th>
+        <th class="col-example">${L.example}</th>
+        <th class="col-actions">操作</th>
+      </tr></thead>
+      <tbody>${cards.map(c => `
+        <tr>
+          <td class="col-word">${esc(c.word)}</td>
+          <td class="col-meaning">${esc(c.meaning)}</td>
+          <td class="col-example">${esc(c.example || '—')}</td>
+          <td class="col-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openEditModal('${c.id}')">編集</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteCard('${c.id}')" style="margin-left:4px">削除</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function updateStudyUI() {
+  const isPhrase = currentDeck().type === 'phrase';
+  document.getElementById('direction-options').classList.toggle('hidden', isPhrase);
+  document.getElementById('phrase-notice').classList.toggle('hidden', !isPhrase);
+}
+
+function updateModalLabels() {
+  const deck = currentDeck();
+  const L = getLabels(deck.type);
+  const isPhrase = deck.type === 'phrase';
+  document.getElementById('label-word').textContent    = L.word + '（必須）';
+  document.getElementById('label-meaning').textContent = L.meaning + '（必須）';
+  document.getElementById('label-example').textContent = L.example + '（任意）';
+  if (isPhrase) {
+    document.getElementById('input-word').placeholder    = "例: I wouldn't say I'm an expert, but I like plants.";
+    document.getElementById('input-meaning').placeholder = '例: 専門家とは言いませんが、植物は好きです。';
+    document.getElementById('input-example').placeholder = "例: I wouldn't say I'm ～, but ～.";
+  } else {
+    document.getElementById('input-word').placeholder    = '例: beautiful';
+    document.getElementById('input-meaning').placeholder = '例: 美しい、素晴らしい';
+    document.getElementById('input-example').placeholder = '例: She has a beautiful smile.';
+  }
+}
+
+function updateImportUI() {
+  const isPhrase = currentDeck().type === 'phrase';
+  const deckName = currentDeck().name;
+  document.getElementById('import-label').textContent =
+    `【${deckName}デッキ】CSVファイルをドロップ、またはクリックして選択`;
+
+  const box = document.getElementById('format-box');
+  if (isPhrase) {
+    box.innerHTML = `
+      <div style="font-weight:600; margin-bottom:4px;">CSVフォーマット（フレーズデッキ）</div>
+      <div style="color:#4a5568; font-size:0.82rem; margin-bottom:6px;">ヘッダー行の <strong>例文訳・例文・表現</strong> 列を自動検出します。Excelそのまま書き出しOK。</div>
+      <pre>Part 1で使える表現,例文,例文訳,適切な質問例
+"I wouldn't say I'm ～, but ～.","I wouldn't say I'm an expert, but I like plants.",専門家とは言いませんが、植物は好きです。,Do you like plants?</pre>
+      <div style="color:#a0aec0; font-size:0.78rem; margin-top:8px;">※ 「例文訳」→日本語面、「例文」→英語面、「表現」→ヒントとして表示</div>`;
+  } else {
+    box.innerHTML = `
+      <div style="font-weight:600; margin-bottom:4px;">CSVフォーマット（単語デッキ）</div>
+      <div style="color:#4a5568; font-size:0.82rem; margin-bottom:6px;">ヘッダー行の <strong>英単語・意味・例文</strong> 列を自動検出します。Excelそのまま書き出しOK。</div>
+      <div style="color:#718096; font-size:0.8rem; margin-bottom:4px;">シンプル形式:</div>
+      <pre>word,meaning,example
+apple,りんご,I eat an apple every day.
+beautiful,美しい,She has a beautiful smile.</pre>
+      <div style="color:#718096; font-size:0.8rem; margin: 8px 0 4px;">Excel出力形式（余分な列・空行があってもOK）:</div>
+      <pre>,番号,英単語,品詞,意味,質問例,例文訳,例文
+,1,apple,名詞,りんご,Do you like fruit?,,I eat an apple.</pre>
+      <div style="color:#a0aec0; font-size:0.78rem; margin-top:8px;">※ 例文は省略可。カンマ含む場合は " " で囲む。文字コード自動判定。</div>`;
+  }
+}
+
+// ── Modal ──────────────────────────────────────────────────────
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = 'カードを追加（' + currentDeck().name + '）';
+  document.getElementById('input-word').value    = '';
+  document.getElementById('input-meaning').value = '';
+  document.getElementById('input-example').value = '';
+  updateModalLabels();
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('input-word').focus();
+}
+
+function openEditModal(id) {
+  const card = currentCards().find(c => c.id === id);
+  if (!card) return;
+  editingId = id;
+  document.getElementById('modal-title').textContent = 'カードを編集';
+  document.getElementById('input-word').value    = card.word;
+  document.getElementById('input-meaning').value = card.meaning;
+  document.getElementById('input-example').value = card.example || '';
+  updateModalLabels();
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('input-word').focus();
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+document.getElementById('modal').addEventListener('click', e => { if (e.target === document.getElementById('modal')) closeModal(); });
+
+function saveCard() {
+  const word    = document.getElementById('input-word').value.trim();
+  const meaning = document.getElementById('input-meaning').value.trim();
+  const example = document.getElementById('input-example').value.trim();
+  if (!word || !meaning) { alert('2つの必須項目を入力してください'); return; }
+  const cards = currentCards();
+  if (editingId) {
+    const idx = cards.findIndex(c => c.id === editingId);
+    if (idx >= 0) cards[idx] = { ...cards[idx], word, meaning, example };
+  } else {
+    cards.push({ id: uid(), word, meaning, example });
+  }
+  save(); closeModal(); renderCards();
+}
+
+function deleteCard(id) {
+  if (!confirm('このカードを削除しますか？')) return;
+  currentDeck().cards = currentCards().filter(c => c.id !== id);
+  save(); renderCards();
+}
+
+function clearAll() {
+  const n = currentCards().length;
+  if (n === 0) return;
+  if (!confirm(`【${currentDeck().name}】の${n}枚をすべて削除しますか？`)) return;
+  currentDeck().cards = [];
+  save(); renderCards();
+}
+
+// ── Import mode toggle ─────────────────────────────────────────
+let importMode = 'file';
+let parsedPasteCards = [];
+
+function setImportMode(mode) {
+  importMode = mode;
+  document.getElementById('import-file-area').classList.toggle('hidden', mode !== 'file');
+  document.getElementById('import-paste-area').classList.toggle('hidden', mode !== 'paste');
+  document.getElementById('btn-mode-file').className  = 'btn ' + (mode === 'file'  ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('btn-mode-paste').className = 'btn ' + (mode === 'paste' ? 'btn-primary' : 'btn-ghost');
+}
+
+function onPasteInput() {
+  const text = document.getElementById('paste-input').value.trim();
+  const previewEl = document.getElementById('paste-preview');
+  if (!text) { previewEl.classList.add('hidden'); parsedPasteCards = []; return; }
+  parsedPasteCards = parseText(text);
+  if (parsedPasteCards.length === 0) { previewEl.classList.add('hidden'); return; }
+  const L = getLabels(currentDeck().type);
+  const sample = parsedPasteCards.slice(0, 4);
+  const more = parsedPasteCards.length - sample.length;
+  document.getElementById('paste-count-text').textContent = `${parsedPasteCards.length}枚のカードを検出しました`;
+  document.getElementById('preview-table').innerHTML = `
+    <thead><tr><th>${L.word}</th><th>${L.meaning}</th><th>${L.example}</th></tr></thead>
+    <tbody>
+      ${sample.map(c => `<tr>
+        <td>${esc(c.word)}</td>
+        <td>${esc(c.meaning)}</td>
+        <td>${esc(c.example || '—')}</td>
+      </tr>`).join('')}
+      ${more > 0 ? `<tr class="preview-more"><td colspan="3">… 他 ${more} 枚</td></tr>` : ''}
+    </tbody>`;
+  previewEl.classList.remove('hidden');
+}
+
+function importFromPaste() {
+  if (parsedPasteCards.length === 0) return;
+  const existing = currentCards().length;
+  const add = existing > 0
+    ? confirm(`${parsedPasteCards.length}枚をインポートします。\n既存${existing}枚に「追加」→ OK\n「上書き」→ キャンセル`)
+    : true;
+  if (!add) currentDeck().cards = [];
+  currentDeck().cards.push(...parsedPasteCards);
+  save(); renderCards();
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('[data-tab="cards"]').classList.add('active');
+  document.querySelectorAll('[id^="tab-"]').forEach(c => c.classList.add('hidden'));
+  document.getElementById('tab-cards').classList.remove('hidden');
+  alert(`✅ ${parsedPasteCards.length}枚をインポートしました（${currentDeck().name}デッキ）`);
+  clearPaste();
+}
+
+function clearPaste() {
+  document.getElementById('paste-input').value = '';
+  document.getElementById('paste-preview').classList.add('hidden');
+  parsedPasteCards = [];
+}
+
+// Unified text parser: handles TSV (Excel/Sheets copy) and CSV
+function parseText(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  if (lines.length === 0) return [];
+
+  // Detect separator: prefer tab (spreadsheet copy) over comma
+  const hasTabs = lines.some(l => l.includes('\t'));
+  const sep = hasTabs ? '\t' : ',';
+  const parseRow = line => sep === '\t' ? line.split('\t') : parseLine(line);
+
+  const deckType = currentDeck().type;
+  const KEYS = {
+    vocab:  { word: ['英単語','word','単語','term','english'],
+               meaning: ['意味','meaning','日本語','japanese'],
+               example: ['例文','example','sentence'] },
+    phrase: { word: ['例文','english','英文','expression'],
+               meaning: ['例文訳','訳','意味','meaning','japanese','translation'],
+               example: ['表現','template','pattern','part'] }
+  };
+  const K = KEYS[deckType] || KEYS.vocab;
+
+  let headerIdx = -1, wordCol = -1, meaningCol = -1, exampleCol = -1;
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const row = parseRow(lines[i]);
+    const wc = row.findIndex(c => K.word.some(k    => c.trim().toLowerCase() === k.toLowerCase()));
+    const mc = row.findIndex(c => K.meaning.some(k => c.trim().toLowerCase() === k.toLowerCase()));
+    const ec = row.findIndex(c => K.example.some(k => c.trim().toLowerCase().includes(k.toLowerCase())));
+    if (wc >= 0 || mc >= 0) { headerIdx = i; wordCol = wc; meaningCol = mc; exampleCol = ec; break; }
+  }
+  if (headerIdx < 0) { headerIdx = 0; wordCol = 0; meaningCol = 1; exampleCol = 2; }
+
+  const cards = [];
+  for (const line of lines.slice(headerIdx + 1)) {
+    if (!line.trim()) continue;
+    const r = parseRow(line);
+    const word    = (wordCol    >= 0 ? r[wordCol]    : r[0] || '').trim();
+    const meaning = (meaningCol >= 0 ? r[meaningCol] : r[1] || '').trim();
+    const example = (exampleCol >= 0 ? r[exampleCol] : r[2] || '').trim();
+    if (word && meaning) cards.push({ id: uid(), word, meaning, example });
+  }
+  return cards;
+}
+
+// ── CSV Import ─────────────────────────────────────────────────
+function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag'); }
+function handleDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) readCSV(file);
+}
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) readCSV(file);
+  e.target.value = ''; // allow re-importing same file
+}
+
+function readCSV(file) {
+  const tryEnc = enc => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      let text = ev.target.result;
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      if (enc === 'UTF-8' && text.includes('�')) {
+        tryEnc('Shift-JIS');
+      } else {
+        parseCSV(text);
+      }
+    };
+    reader.readAsText(file, enc);
+  };
+  tryEnc('UTF-8');
+}
+
+function parseCSV(text) {
+  const deckType = currentDeck().type;
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+
+  const KEYS = {
+    vocab: {
+      word:    ['英単語', 'word', '単語', 'term', 'english'],
+      meaning: ['意味', 'meaning', '日本語', 'japanese'],
+      example: ['例文', 'example', 'sentence']
+    },
+    phrase: {
+      word:    ['例文', 'english', '英文', 'expression'],
+      meaning: ['例文訳', '訳', '意味', 'meaning', 'japanese', 'translation'],
+      example: ['表現', 'template', 'pattern', 'part'] // 'part' catches 'Part 1で使える表現'
+    }
+  };
+  const K = KEYS[deckType] || KEYS.vocab;
+
+  // Find header row by scanning for known column names
+  let headerIdx = -1, wordCol = -1, meaningCol = -1, exampleCol = -1;
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    if (!lines[i].trim()) continue;
+    const row = parseLine(lines[i]);
+    const wc = row.findIndex(c => K.word.some(k    => c.trim().toLowerCase() === k.toLowerCase()));
+    const mc = row.findIndex(c => K.meaning.some(k => c.trim().toLowerCase() === k.toLowerCase()));
+    const ec = row.findIndex(c => K.example.some(k => c.trim().toLowerCase().includes(k.toLowerCase())));
+    if (wc >= 0 || mc >= 0) {
+      headerIdx = i; wordCol = wc; meaningCol = mc; exampleCol = ec;
+      break;
+    }
+  }
+  // Fallback: no header detected, use columns 0/1/2 with first row skipped
+  if (headerIdx < 0) { headerIdx = 0; wordCol = 0; meaningCol = 1; exampleCol = 2; }
+
+  const imported = [];
+  for (const line of lines.slice(headerIdx + 1)) {
+    if (!line.trim()) continue;
+    const r = parseLine(line);
+    const word    = (wordCol    >= 0 ? r[wordCol]    : r[0] || '').trim();
+    const meaning = (meaningCol >= 0 ? r[meaningCol] : r[1] || '').trim();
+    const example = (exampleCol >= 0 ? r[exampleCol] : r[2] || '').trim();
+    if (word && meaning) imported.push({ id: uid(), word, meaning, example });
+  }
+
+  if (imported.length === 0) {
+    alert('有効なカードが見つかりません。\nヒント: ヘッダー行に「英単語」「意味」「例文」などの列名があるか確認してください。');
+    return;
+  }
+
+  const existing = currentCards().length;
+  const add = existing > 0 ? confirm(`${imported.length}枚をインポートします。\n既存${existing}枚に「追加」→ OK\n「上書き（削除してから追加）」→ キャンセル`) : true;
+  if (!add) currentDeck().cards = [];
+  currentDeck().cards.push(...imported);
+  save(); renderCards();
+
+  // Switch to cards tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('[data-tab="cards"]').classList.add('active');
+  document.querySelectorAll('[id^="tab-"]').forEach(c => c.classList.add('hidden'));
+  document.getElementById('tab-cards').classList.remove('hidden');
+  alert(`✅ ${imported.length}枚をインポートしました（${currentDeck().name}デッキ）`);
+}
+
+function parseLine(line) {
+  const result = [];
+  let cur = '', inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+      else { inQuote = !inQuote; }
+    } else if (ch === ',' && !inQuote) {
+      result.push(cur); cur = '';
+    } else { cur += ch; }
+  }
+  result.push(cur);
+  return result;
+}
+
+// ── Study mode ─────────────────────────────────────────────────
+function startStudy() {
+  const deck = currentDeck();
+  if (deck.cards.length === 0) { alert('カードがありません'); return; }
+  const isPhrase = deck.type === 'phrase';
+  const dir   = isPhrase ? 'back' : document.querySelector('input[name="direction"]:checked').value;
+  const order = document.querySelector('input[name="order"]:checked').value;
+  studyDirection = dir;
+  masteryMode = document.querySelector('input[name="studymode"]:checked').value === 'mastery';
+
+  studyQueue = [...deck.cards];
+  if (order === 'shuffle') {
+    for (let i = studyQueue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [studyQueue[i], studyQueue[j]] = [studyQueue[j], studyQueue[i]];
+    }
+  }
+  studyIndex = 0; studyCorrect = 0;
+  masteryTotal = studyQueue.length; masteryAttempts = 0;
+
+  document.getElementById('card-scene').classList.toggle('phrase-mode', isPhrase);
+  document.getElementById('study-setup').classList.add('hidden');
+  document.getElementById('study-result').classList.add('hidden');
+  document.getElementById('study-session').classList.remove('hidden');
+  showCard();
+}
+
+function showCard() {
+  if (studyQueue.length === 0) { showResult(); return; }
+  const card = studyQueue[studyIndex];
+  const deck = currentDeck();
+  const L    = getLabels(deck.type);
+
+  if (masteryMode) {
+    const mastered = masteryTotal - studyQueue.length;
+    document.getElementById('progress-fill').style.width = (mastered / masteryTotal * 100).toFixed(0) + '%';
+    document.getElementById('progress-text').textContent = `習得 ${mastered} / ${masteryTotal}`;
+  } else {
+    const total = masteryTotal;
+    document.getElementById('progress-fill').style.width = (studyIndex / total * 100).toFixed(0) + '%';
+    document.getElementById('progress-text').textContent = (studyIndex + 1) + ' / ' + total;
+  }
+
+  let dir = studyDirection;
+  if (dir === 'random') dir = Math.random() < 0.5 ? 'front' : 'back';
+
+  if (dir === 'front') {
+    // English → Japanese
+    currentFrontIsEnglish = true;
+    document.getElementById('front-label').textContent    = L.word;
+    document.getElementById('front-word').textContent     = card.word;
+    document.getElementById('front-example').textContent  = card.example || '';
+    document.getElementById('front-speak').style.display  = 'flex';
+    document.getElementById('back-label').textContent     = L.meaning;
+    document.getElementById('back-word').textContent      = card.meaning;
+    document.getElementById('back-example').textContent   = '';
+    document.getElementById('back-speak').style.display   = 'none';
+    document.getElementById('back-pattern').classList.add('hidden');
+  } else {
+    // Japanese → English (phrase deck always here)
+    currentFrontIsEnglish = false;
+    document.getElementById('front-label').textContent    = L.meaning;
+    document.getElementById('front-word').textContent     = card.meaning;
+    document.getElementById('front-example').textContent  = '';
+    document.getElementById('front-speak').style.display  = 'none';
+    document.getElementById('back-label').textContent     = L.word;
+    document.getElementById('back-word').textContent      = card.word;
+    document.getElementById('back-example').textContent   = '';
+    document.getElementById('back-speak').style.display   = 'flex';
+    // Show template pattern as hint for phrase deck
+    const patEl = document.getElementById('back-pattern');
+    if (deck.type === 'phrase' && card.example) {
+      patEl.textContent = card.example;
+      patEl.classList.remove('hidden');
+    } else {
+      patEl.classList.add('hidden');
+    }
+  }
+
+  // Reset card without animation so next card's back face doesn't flash
+  const inner = document.getElementById('card-inner');
+  const scene = document.getElementById('card-scene');
+  inner.style.transition = 'none';
+  scene.classList.remove('flipped');
+  void inner.offsetWidth; // force reflow
+  inner.style.transition = '';
+  isFlipped = false;
+  document.getElementById('answer-actions').style.display = 'none';
+}
+
+function flipCard() {
+  isFlipped = !isFlipped;
+  document.getElementById('card-scene').classList.toggle('flipped', isFlipped);
+  document.getElementById('answer-actions').style.display = isFlipped ? 'flex' : 'none';
+}
+
+function answer(correct) {
+  if (masteryMode) {
+    masteryAttempts++;
+    const card = studyQueue[studyIndex];
+    studyQueue.splice(studyIndex, 1);          // remove from current position
+    if (!correct) studyQueue.push(card);       // wrong → add to end
+    if (studyIndex >= studyQueue.length) studyIndex = 0; // wrap if needed
+    if (studyQueue.length === 0) { showResult(); return; }
+  } else {
+    if (correct) studyCorrect++;
+    studyIndex++;
+  }
+  showCard();
+}
+
+function endStudy() {
+  document.getElementById('study-session').classList.add('hidden');
+  document.getElementById('study-result').classList.add('hidden');
+  document.getElementById('study-setup').classList.remove('hidden');
+}
+
+function showResult() {
+  document.getElementById('study-session').classList.add('hidden');
+  if (masteryMode) {
+    const avg = masteryTotal > 0 ? (masteryAttempts / masteryTotal).toFixed(1) : '—';
+    document.getElementById('result-title').textContent         = '習得完了！';
+    document.getElementById('result-score').textContent         = masteryTotal + '枚';
+    document.getElementById('result-score').style.fontSize      = '2.8rem';
+    document.getElementById('result-label').textContent         = `平均 ${avg} 回/枚`;
+    document.getElementById('result-correct').textContent       = masteryTotal;
+    document.getElementById('result-incorrect').textContent     = masteryAttempts - masteryTotal;
+    document.getElementById('result-total').textContent         = masteryAttempts;
+    document.getElementById('label-correct').textContent        = '習得枚数';
+    document.getElementById('label-incorrect').textContent      = '誤答回数';
+    document.getElementById('label-total').textContent          = '合計試行';
+  } else {
+    const total = masteryTotal;
+    const pct   = total > 0 ? Math.round(studyCorrect / total * 100) : 0;
+    document.getElementById('result-title').textContent         = '結果';
+    document.getElementById('result-score').textContent         = pct + '%';
+    document.getElementById('result-score').style.fontSize      = '3.5rem';
+    document.getElementById('result-label').textContent         = '正答率';
+    document.getElementById('result-correct').textContent       = studyCorrect;
+    document.getElementById('result-incorrect').textContent     = total - studyCorrect;
+    document.getElementById('result-total').textContent         = total;
+    document.getElementById('label-correct').textContent        = '正解';
+    document.getElementById('label-incorrect').textContent      = '不正解';
+    document.getElementById('label-total').textContent          = '合計';
+  }
+  document.getElementById('study-result').classList.remove('hidden');
+}
+
+// ── TTS ────────────────────────────────────────────────────────
+let ttsVoices = [];
+
+// Preferred voices in priority order (highest quality first)
+const PREF_EN = [
+  'Google US English',
+  'Microsoft Aria Online (Natural) - English (United States)',
+  'Microsoft Guy Online (Natural) - English (United States)',
+  'Microsoft Jenny Online (Natural) - English (United States)',
+  'Samantha',   // macOS high-quality
+  'Karen',      // macOS AU
+  'Daniel',     // macOS UK
+  'Moira',      // macOS IE
+];
+const PREF_JA = [
+  'Google 日本語',
+  'Microsoft Nanami Online (Natural) - Japanese (Japan)',
+  'O-ren',      // macOS
+  'Kyoko',      // macOS
+];
+
+function loadVoices() {
+  ttsVoices = window.speechSynthesis.getVoices();
+  return ttsVoices.length > 0;
+}
+
+function getBestVoice(lang) {
+  if (ttsVoices.length === 0) loadVoices();
+  const prefs = lang.startsWith('en') ? PREF_EN : PREF_JA;
+  for (const name of prefs) {
+    const v = ttsVoices.find(v => v.name === name);
+    if (v) return v;
+  }
+  // Fallback: any voice matching the language
+  return ttsVoices.find(v => v.lang === lang) ||
+         ttsVoices.find(v => v.lang.startsWith(lang.slice(0, 2))) ||
+         null;
+}
+
+function speak(text, lang) {
+  if (!window.speechSynthesis) { alert('このブラウザはTTSに対応していません'); return; }
+  window.speechSynthesis.cancel();
+  const doSpeak = () => {
+    const u = new SpeechSynthesisUtterance(text.replace(/～/g, ''));
+    const voice = getBestVoice(lang);
+    if (voice) u.voice = voice;
+    u.lang = lang;
+    u.rate = 0.9;
+    window.speechSynthesis.speak(u);
+  };
+  if (ttsVoices.length > 0) {
+    doSpeak();
+  } else {
+    // Voices not loaded yet — wait for the event then speak
+    window.speechSynthesis.onvoiceschanged = () => {
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = null;
+      doSpeak();
+    };
+  }
+}
+
+function speakFront() {
+  const card = studyQueue[studyIndex];
+  if (!card) return;
+  if (currentFrontIsEnglish) speak(card.word + '. ' + (card.example || ''), 'en-US');
+  else speak(card.meaning, 'ja-JP');
+}
+function speakBack() {
+  const card = studyQueue[studyIndex];
+  if (!card) return;
+  if (!currentFrontIsEnglish) speak(card.word, 'en-US');
+  else speak(card.meaning, 'ja-JP');
+}
+
+// ── Keyboard ───────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (!document.getElementById('study-session').classList.contains('hidden')) {
+    if (e.code === 'Space' || e.code === 'ArrowDown') { e.preventDefault(); flipCard(); }
+    if (e.code === 'ArrowRight' || e.code === 'KeyO') answer(true);
+    if (e.code === 'ArrowLeft'  || e.code === 'KeyX') answer(false);
+  }
+});
+
+// ── Tabs ───────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('[id^="tab-"]').forEach(c => c.classList.add('hidden'));
+    document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
+    if (tab.dataset.tab === 'study') endStudy();
+    if (tab.dataset.tab === 'import') updateImportUI();
+  });
+});
+
+// ── Utils ──────────────────────────────────────────────────────
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ───────────────────────────────────────────────────────
+load();
+renderAll();
+
+// Pre-load TTS voices (they load asynchronously on first access)
+if (window.speechSynthesis) {
+  if (!loadVoices()) {
+    window.speechSynthesis.onvoiceschanged = () => { loadVoices(); };
+  }
+}
+</script>
+</body>
+</html>
