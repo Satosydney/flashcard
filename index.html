@@ -1074,7 +1074,10 @@ const PREF_EN = [
   'Microsoft Aria Online (Natural) - English (United States)',
   'Microsoft Guy Online (Natural) - English (United States)',
   'Microsoft Jenny Online (Natural) - English (United States)',
-  'Samantha',   // macOS high-quality
+  'Samantha',            // macOS
+  'Samantha (Enhanced)', // iOS enhanced (downloaded)
+  'Nicky (Enhanced)',    // iOS enhanced
+  'Aaron (Enhanced)',    // iOS enhanced
   'Karen',      // macOS AU
   'Daniel',     // macOS UK
   'Moira',      // macOS IE
@@ -1084,6 +1087,8 @@ const PREF_JA = [
   'Microsoft Nanami Online (Natural) - Japanese (Japan)',
   'O-ren',      // macOS
   'Kyoko',      // macOS
+  'Kyoko (Enhanced)',    // iOS enhanced
+  'O-ren (Enhanced)',    // iOS enhanced
 ];
 
 function loadVoices() {
@@ -1094,14 +1099,27 @@ function loadVoices() {
 function getBestVoice(lang) {
   if (ttsVoices.length === 0) loadVoices();
   const prefs = lang.startsWith('en') ? PREF_EN : PREF_JA;
+
+  // 1. Named preferred voices
   for (const name of prefs) {
     const v = ttsVoices.find(v => v.name === name);
     if (v) return v;
   }
-  // Fallback: any voice matching the language
-  return ttsVoices.find(v => v.lang === lang) ||
-         ttsVoices.find(v => v.lang.startsWith(lang.slice(0, 2))) ||
-         null;
+
+  const candidates = ttsVoices.filter(v =>
+    v.lang === lang || v.lang.startsWith(lang.slice(0, 2))
+  );
+
+  // 2. Network (cloud) voices — highest quality, requires internet
+  const network = candidates.find(v => !v.localService);
+  if (network) return network;
+
+  // 3. Enhanced/Premium local voices
+  const enhanced = candidates.find(v => /enhanced|premium/i.test(v.name));
+  if (enhanced) return enhanced;
+
+  // 4. Any voice, avoiding "compact" low-quality ones
+  return candidates.find(v => !/compact/i.test(v.name)) || candidates[0] || null;
 }
 
 function speak(text, lang) {
