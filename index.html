@@ -1093,6 +1093,10 @@ const PREF_JA = [
 
 function loadVoices() {
   ttsVoices = window.speechSynthesis.getVoices();
+  if (ttsVoices.length > 0) {
+    console.log('[TTS] Available voices:\n' +
+      ttsVoices.map(v => `  ${v.name} | ${v.lang} | local:${v.localService}`).join('\n'));
+  }
   return ttsVoices.length > 0;
 }
 
@@ -1128,7 +1132,8 @@ function speak(text, lang) {
   const doSpeak = () => {
     const u = new SpeechSynthesisUtterance(text.replace(/～/g, ''));
     const voice = getBestVoice(lang);
-    if (voice) u.voice = voice;
+    // Don't force a compact/low-quality voice — let system default handle it
+    if (voice && !/compact/i.test(voice.name)) u.voice = voice;
     u.lang = lang;
     u.rate = 0.9;
     window.speechSynthesis.speak(u);
