@@ -458,9 +458,8 @@ async function loadFromCloud() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } else {
     load();
-    // Bootstrap cloud with local data if any exists
-    const hasCards = state.decks.some(d => d.cards && d.cards.length > 0);
-    if (hasCards) saveToCloud();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    saveToCloud(); // overwrite any bad/missing cloud state with current state
   }
 }
 
