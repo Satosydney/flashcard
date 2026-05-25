@@ -384,6 +384,13 @@ function initDefaultDecks() {
   };
 }
 
+function ensureDefaultDecks() {
+  if (!state.decks || !Array.isArray(state.decks) || state.decks.length === 0) {
+    initDefaultDecks();
+  }
+  if (!state.activeDeckId) state.activeDeckId = state.decks[0]?.id || 'vocab';
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -400,14 +407,19 @@ function load() {
     if (data && Array.isArray(data.decks)) state = data;
     else initDefaultDecks();
   } catch { initDefaultDecks(); }
+  ensureDefaultDecks();
 }
 
-function save() {
+function save(immediate) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   if (sb && currentUser) {
     clearTimeout(syncTimer);
-    updateSyncStatus('pending');
-    syncTimer = setTimeout(saveToCloud, 2000);
+    if (immediate) {
+      saveToCloud();
+    } else {
+      updateSyncStatus('pending');
+      syncTimer = setTimeout(saveToCloud, 800);
+    }
   }
 }
 
@@ -440,11 +452,15 @@ async function loadFromCloud() {
     .eq('user_id', currentUser.id)
     .single();
   if (error && error.code !== 'PGRST116') { load(); return; }
-  if (data?.state && Array.isArray(data.state.decks)) {
+  if (data?.state && Array.isArray(data.state.decks) && data.state.decks.length > 0) {
     state = data.state;
+    ensureDefaultDecks();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } else {
     load();
+    // Bootstrap cloud with local data if any exists
+    const hasCards = state.decks.some(d => d.cards && d.cards.length > 0);
+    if (hasCards) saveToCloud();
   }
 }
 
@@ -717,7 +733,7 @@ function importFromPaste() {
     : true;
   if (!add) currentDeck().cards = [];
   currentDeck().cards.push(...parsedPasteCards);
-  save(); renderCards();
+  save(true); renderCards();
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelector('[data-tab="cards"]').classList.add('active');
   document.querySelectorAll('[id^="tab-"]').forEach(c => c.classList.add('hidden'));
@@ -859,7 +875,7 @@ function parseCSV(text) {
   const add = existing > 0 ? confirm(`${imported.length}枚をインポートします。\n既存${existing}枚に「追加」→ OK\n「上書き（削除してから追加）」→ キャンセル`) : true;
   if (!add) currentDeck().cards = [];
   currentDeck().cards.push(...imported);
-  save(); renderCards();
+  save(true); renderCards();
 
   // Switch to cards tab
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1135,6 +1151,15 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// Save on tab hide / before unload (best-effort)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && sb && currentUser && syncTimer) {
+    clearTimeout(syncTimer);
+    syncTimer = null;
+    saveToCloud();
+  }
+});
 
 // ── Init ───────────────────────────────────────────────────────
 if (typeof window.supabase !== 'undefined' && SUPABASE_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
