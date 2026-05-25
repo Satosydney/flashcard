@@ -130,13 +130,30 @@
   .phrase-mode .card-word { font-size: 1.3rem; font-weight: 600; }
   .phrase-mode .card-face.back .card-word { color: #2c5282; }
   .phrase-pattern { font-size: 0.78rem; color: #9f7aea; background: #faf5ff; border: 1px solid #e9d8fd; border-radius: 6px; padding: 6px 12px; margin-top: 12px; font-family: monospace; }
+
+  /* Auth / Login overlay */
+  .login-overlay { position: fixed; inset: 0; background: rgba(26,32,44,0.97); z-index: 300; display: flex; align-items: center; justify-content: center; }
+  .login-overlay.hidden { display: none !important; }
+  .login-box { background: white; border-radius: 20px; padding: 40px 36px; width: 360px; max-width: 95vw; box-shadow: 0 24px 80px rgba(0,0,0,0.4); text-align: center; }
+  .login-box h2 { font-size: 1.3rem; margin-bottom: 6px; }
+  .login-box p { color: #718096; font-size: 0.875rem; margin-bottom: 24px; }
+  .auth-input { width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; margin-bottom: 10px; outline: none; transition: border-color 0.2s; }
+  .auth-input:focus { border-color: #4a90d9; }
+  .auth-error { margin-top: 12px; font-size: 0.82rem; min-height: 18px; color: #e53e3e; }
+  .auth-error.ok { color: #48bb78; }
+  #sync-status { margin-left: auto; font-size: 1.2rem; cursor: default; }
+  #logout-btn { padding: 5px 12px; font-size: 0.8rem; border-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.7); }
+  #logout-btn:hover { border-color: white; color: white; background: transparent; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div class="app">
   <header>
     <h1>📚 フラッシュカード</h1>
     <div class="deck-switcher" id="deck-switcher"></div>
+    <span id="sync-status" title=""></span>
+    <button id="logout-btn" class="btn btn-ghost" onclick="signOut()" style="display:none;">ログアウト</button>
   </header>
 
   <div class="tab-bar">
@@ -308,11 +325,37 @@
   </div>
 </div>
 
+<!-- Login Overlay -->
+<div id="login-overlay" class="login-overlay hidden">
+  <div class="login-box">
+    <div style="font-size:2.5rem; margin-bottom:8px;">📚</div>
+    <h2>フラッシュカード</h2>
+    <p>ログインしてクラウド同期を有効にします</p>
+    <input type="email" id="auth-email" class="auth-input" placeholder="メールアドレス">
+    <input type="password" id="auth-pw" class="auth-input" placeholder="パスワード（6文字以上）"
+           onkeydown="if(event.key==='Enter') signIn()">
+    <div style="display:flex; gap:8px; margin-top:6px;">
+      <button id="auth-submit" class="btn btn-primary" style="flex:1;" onclick="signIn()">ログイン</button>
+      <button class="btn btn-ghost" style="flex:1;" onclick="signUp()">新規登録</button>
+    </div>
+    <div id="auth-error" class="auth-error"></div>
+  </div>
+</div>
+
 <script>
+// ── Supabase Config ────────────────────────────────────────────
+const SUPABASE_URL = 'https://pkstiquylqobprybsapi.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_asz521kzc7-bv30Tb2Zdew_MMwDJyma'; // paste your publishable anon key here
+
 // ── State ──────────────────────────────────────────────────────
 const STORAGE_KEY = 'flashcard_v2';
 let state = { decks: [], activeDeckId: 'vocab' };
 let editingId = null;
+
+// Supabase runtime
+let sb = null;
+let currentUser = null;
+let syncTimer = null;
 
 // Study
 let studyQueue = [], studyIndex = 0, studyCorrect = 0;
@@ -346,7 +389,6 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       initDefaultDecks();
-      // Migrate v1 data (flat card array) into vocab deck
       const old = localStorage.getItem('flashcard_v1');
       if (old) {
         const arr = JSON.parse(old);
@@ -355,15 +397,117 @@ function load() {
       return;
     }
     const data = JSON.parse(raw);
-    if (data && Array.isArray(data.decks)) {
-      state = data;
-    } else {
-      initDefaultDecks();
-    }
+    if (data && Array.isArray(data.decks)) state = data;
+    else initDefaultDecks();
   } catch { initDefaultDecks(); }
 }
 
-function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (sb && currentUser) {
+    clearTimeout(syncTimer);
+    updateSyncStatus('pending');
+    syncTimer = setTimeout(saveToCloud, 2000);
+  }
+}
+
+// ── Supabase Auth & Sync ────────────────────────────────────────
+function initSupabase() {
+  if (!SUPABASE_KEY || SUPABASE_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+    load(); renderAll(); return;
+  }
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  sb.auth.onAuthStateChange(async (event, session) => {
+    currentUser = session?.user ?? null;
+    if (currentUser) {
+      document.getElementById('login-overlay').classList.add('hidden');
+      updateSyncStatus('loading');
+      await loadFromCloud();
+      renderAll();
+      updateSyncStatus('synced');
+      updateAuthUI();
+    } else {
+      document.getElementById('login-overlay').classList.remove('hidden');
+      updateAuthUI();
+    }
+  });
+}
+
+async function loadFromCloud() {
+  const { data, error } = await sb
+    .from('user_data')
+    .select('state')
+    .eq('user_id', currentUser.id)
+    .single();
+  if (error && error.code !== 'PGRST116') { load(); return; }
+  if (data?.state && Array.isArray(data.state.decks)) {
+    state = data.state;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } else {
+    load();
+  }
+}
+
+async function saveToCloud() {
+  if (!sb || !currentUser) return;
+  updateSyncStatus('saving');
+  const { error } = await sb
+    .from('user_data')
+    .upsert({ user_id: currentUser.id, state, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  updateSyncStatus(error ? 'error' : 'synced');
+  if (error) console.error('Cloud save:', error);
+}
+
+function updateSyncStatus(status) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const map = {
+    loading: ['⟳', '#a0aec0', '読み込み中'],
+    saving:  ['⟳', '#4a90d9', '同期中'],
+    pending: ['·', '#ed8936', '保存待ち'],
+    synced:  ['☁', '#48bb78', 'クラウド同期済'],
+    error:   ['⚠', '#fc8181', '同期エラー'],
+  };
+  const [icon, color, title] = map[status] || ['', '', ''];
+  el.textContent = icon; el.style.color = color; el.title = title;
+}
+
+function updateAuthUI() {
+  const btn = document.getElementById('logout-btn');
+  if (!btn) return;
+  btn.style.display = currentUser ? 'inline-block' : 'none';
+  if (currentUser) btn.title = currentUser.email;
+}
+
+async function signIn() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pw    = document.getElementById('auth-pw').value;
+  const errEl = document.getElementById('auth-error');
+  errEl.className = 'auth-error'; errEl.textContent = '';
+  if (!email || !pw) { errEl.textContent = 'メールとパスワードを入力してください'; return; }
+  const btn = document.getElementById('auth-submit');
+  btn.disabled = true; btn.textContent = '...';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+  btn.disabled = false; btn.textContent = 'ログイン';
+  if (error) errEl.textContent = error.message;
+}
+
+async function signUp() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pw    = document.getElementById('auth-pw').value;
+  const errEl = document.getElementById('auth-error');
+  errEl.className = 'auth-error'; errEl.textContent = '';
+  if (!email || !pw) { errEl.textContent = 'メールとパスワードを入力してください'; return; }
+  if (pw.length < 6) { errEl.textContent = 'パスワードは6文字以上'; return; }
+  const { error } = await sb.auth.signUp({ email, password: pw });
+  if (error) { errEl.textContent = error.message; }
+  else { errEl.className = 'auth-error ok'; errEl.textContent = '確認メールを送信しました。メールを確認してログインしてください。'; }
+}
+
+async function signOut() {
+  if (!confirm('ログアウトしますか？')) return;
+  await sb.auth.signOut();
+}
 
 // ── Deck switching ─────────────────────────────────────────────
 function switchDeck(id) {
@@ -993,8 +1137,13 @@ function esc(s) {
 }
 
 // ── Init ───────────────────────────────────────────────────────
-load();
-renderAll();
+if (typeof window.supabase !== 'undefined' && SUPABASE_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
+  document.getElementById('login-overlay').classList.remove('hidden');
+  initSupabase();
+} else {
+  load();
+  renderAll();
+}
 
 // Pre-load TTS voices (they load asynchronously on first access)
 if (window.speechSynthesis) {
