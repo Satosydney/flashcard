@@ -445,20 +445,23 @@ function initSupabase() {
 }
 
 async function loadFromCloud() {
-  const { data, error } = await sb
-    .from('user_data')
-    .select('state')
-    .eq('user_id', currentUser.id)
-    .single();
-  if (error && error.code !== 'PGRST116') { load(); return; }
-  if (data?.state && Array.isArray(data.state.decks) && data.state.decks.length > 0) {
-    state = data.state;
-    ensureDefaultDecks();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } else {
+  try {
+    const queryPromise = sb.from('user_data').select('state').eq('user_id', currentUser.id).single();
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000));
+    const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+    if (error && error.code !== 'PGRST116') { load(); return; }
+    if (data?.state && Array.isArray(data.state.decks) && data.state.decks.length > 0) {
+      state = data.state;
+      ensureDefaultDecks();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } else {
+      load();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      saveToCloud();
+    }
+  } catch (e) {
+    console.warn('Cloud load failed or timed out:', e.message);
     load();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    saveToCloud(); // overwrite any bad/missing cloud state with current state
   }
 }
 
